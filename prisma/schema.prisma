@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  OWNER
+}
+
+enum ActionType {
+  POST
+  LIKE
+  FOLLOW
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String   // In real app, hash this!
+  name      String
+  role      Role     @default(USER)
+  
+  posts     Post[]
+  likes     Like[]
+  
+  // Follow system
+  followedBy Follow[] @relation("following")
+  following  Follow[] @relation("follower")
+
+  // Blocking system
+  blockedBy Block[] @relation("blockedBy") // Users who blocked me
+  blocking  Block[] @relation("blocking")  // Users I have blocked
+
+  // Activity Log (Actions I did)
+  activities ActivityLog[]
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  content   String
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes     Like[]
+}
+
+model Follow {
+  followerId Int
+  followingId Int
+  follower   User @relation("follower", fields: [followerId], references: [id])
+  following  User @relation("following", fields: [followingId], references: [id])
+
+  @@id([followerId, followingId])
+}
+
+model Block {
+  blockerId Int
+  blockedId Int
+  blocker   User @relation("blocking", fields: [blockerId], references: [id])
+  blocked   User @relation("blockedBy", fields: [blockedId], references: [id])
+
+  @@id([blockerId, blockedId])
+}
+
+model Like {
+  userId Int
+  postId Int
+  user   User @relation(fields: [userId], references: [id])
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+}
+
+// THE ACTIVITY WALL
+// Instead of complex joins, we log every significant action here.
+model ActivityLog {
+  id         Int        @id @default(autoincrement())
+  actorId    Int        // Who did it?
+  actor      User       @relation(fields: [actorId], references: [id])
+  actionType ActionType // POST, LIKE, FOLLOW
+  targetId   Int?       // ID of the post or user interacted with
+  metadata   String     // e.g., "ABC made a post", "PQR liked ABC's post"
+  createdAt  DateTime   @default(now())
+}
